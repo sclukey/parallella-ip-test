@@ -73,7 +73,9 @@ typedef struct {
 	e_loader_diag_t verbose;
 	char srecFile[4096];
 	char ifname[255];
+	char iifname[255];
 	char ofname[255];
+	char oofname[255];
 } args_t;
 
 args_t ar = {TRUE, L_D0, ""};
@@ -129,8 +131,6 @@ int main(int argc, char *argv[])
 	msize     = 0x00400000;
 
 	get_args(argc, argv);
-
-
 
 //	fi = fopen(ifname, "rb");
 //	fo = stdout;
@@ -515,6 +515,7 @@ void get_args(int argc, char *argv[])
 		if (!strcmp(argv[n], "-h"))
 			usage(0);
 
+		strcpy(ar.iifname, ar.ifname);
 		strcpy(ar.ifname, argv[n]);
 	}
 
@@ -533,6 +534,22 @@ void get_args(int argc, char *argv[])
 			strcat(ar.ofname, buf);
 		} else {
 			strcat(ar.ofname, ".lpf");
+		}
+	}
+
+	if (!strcmp(ar.iifname, ""))
+	{
+		usage(1);
+	} else {
+		strcpy(ar.oofname, ar.iifname);
+		dotp = strrchr(ar.oofname, '.');
+		if (dotp != NULL)
+		{
+			strcpy(buf, dotp);
+			strcpy(dotp, ".lpf");
+			strcat(ar.oofname, buf);
+		} else {
+			strcat(ar.oofname, ".lpf");
 		}
 	}
 

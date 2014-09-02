@@ -9,9 +9,9 @@ else
 fi
 
 if [[ "$1" == "" ]]; then
-	Img=../../lenna.jpg
+	Img="../../comet.jpg ../../lenna.jpg"
 else
-	Ing=$@
+	Img=$@
 fi
 
 ELIBS="${EPIPHANY_HOME}/tools/host/lib"
