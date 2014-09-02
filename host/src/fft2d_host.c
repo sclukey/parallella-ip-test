@@ -192,189 +192,198 @@ int main(int argc, char *argv[])
 	// create the coreID list
 	init_coreID(pEpiphany, coreID, _Nside, _Nside, 0x808);
 
-
-	// Generate the main image name to use, bind it and load the image file.
-	ilGenImages(1, &ImgId);
-	ilBindImage(ImgId);
-	printf("\n");
-	printf("Loading original image from file \"%s\".\n\n", ar.ifname);
-	if (!ilLoadImage(ar.ifname))
+	for (int imgNum=0;imgNum<2;imgNum++)
 	{
-		fprintf(stderr, "Could not open input image file \"%s\" ...exiting.\n", ar.ifname);
-		exit(3);
-	}
+		if (imgNum == 1) {
+			strcpy(ar.ifname, ar.iifname);
+			strcpy(ar.ofname, ar.oofname);
+		}
 
 
-	// Display the image's dimensions to the end user.
-	printf("Width: %d  Height: %d  Depth: %d  Bpp: %d\n\n",
-	       ilGetInteger(IL_IMAGE_WIDTH),
-	       ilGetInteger(IL_IMAGE_HEIGHT),
-	       ilGetInteger(IL_IMAGE_DEPTH),
-	       ilGetInteger(IL_IMAGE_BITS_PER_PIXEL));
-
-	imdata = ilGetData();
-	imsize = ilGetInteger(IL_IMAGE_WIDTH) * ilGetInteger(IL_IMAGE_HEIGHT);
-	imBpp  = ilGetInteger(IL_IMAGE_BYTES_PER_PIXEL);
-
-	if (imsize != (_Sfft * _Sfft))
-	{
-		printf("Image file size is different from %dx%d ...exiting.\n", _Sfft, _Sfft);
-		exit(5);
-	}
+		// Generate the main image name to use, bind it and load the image file.
+		ilGenImages(1, &ImgId);
+		ilBindImage(ImgId);
+		printf("\n");
+		printf("Loading original image from file \"%s\".\n\n", ar.ifname);
+		if (!ilLoadImage(ar.ifname))
+		{
+			fprintf(stderr, "Could not open input image file \"%s\" ...exiting.\n", ar.ifname);
+			exit(3);
+		}
 
 
-	// Extract image data into the A matrix.
-	for (unsigned int i=0; i<imsize; i++)
-	{
-		Mailbox.A[i] = (float) imdata[i*imBpp] + 0.0 * I;
-	}
+		// Display the image's dimensions to the end user.
+		printf("Width: %d  Height: %d  Depth: %d  Bpp: %d\n\n",
+		       ilGetInteger(IL_IMAGE_WIDTH),
+		       ilGetInteger(IL_IMAGE_HEIGHT),
+		       ilGetInteger(IL_IMAGE_DEPTH),
+		       ilGetInteger(IL_IMAGE_BITS_PER_PIXEL));
 
-	fprintf(fo, "\n");
+		imdata = ilGetData();
+		imsize = ilGetInteger(IL_IMAGE_WIDTH) * ilGetInteger(IL_IMAGE_HEIGHT);
+		imBpp  = ilGetInteger(IL_IMAGE_BYTES_PER_PIXEL);
+
+		if (imsize != (_Sfft * _Sfft))
+		{
+			printf("Image file size is different from %dx%d ...exiting.\n", _Sfft, _Sfft);
+			exit(5);
+		}
 
 
-	// Generate operand matrices based on a provided seed
-	matrix_init(0);
+		// Extract image data into the A matrix.
+		for (unsigned int i=0; i<imsize; i++)
+		{
+			Mailbox.A[i] = (float) imdata[i*imBpp] + 0.0 * I;
+		}
+
+		fprintf(fo, "\n");
+
+
+		// Generate operand matrices based on a provided seed
+		matrix_init(0);
 
 #ifdef _USE_DRAM_
-	// Copy operand matrices to Epiphany system
-	addr = DRAM_BASE + offsetof(shared_buf_t, A[0]);
-	sz = sizeof(Mailbox.A);
-	 printf(       "Writing A[%ldB] to address %08x...\n", sz, addr);
-	fprintf(fo, "%% Writing A[%ldB] to address %08x...\n", sz, addr);
-	e_write(addr, (void *) Mailbox.A, sz);
+		// Copy operand matrices to Epiphany system
+		addr = DRAM_BASE + offsetof(shared_buf_t, A[0]);
+		sz = sizeof(Mailbox.A);
+		 printf(       "Writing A[%ldB] to address %08x...\n", sz, addr);
+		fprintf(fo, "%% Writing A[%ldB] to address %08x...\n", sz, addr);
+		e_write(addr, (void *) Mailbox.A, sz);
 
-	addr = DRAM_BASE + offsetof(shared_buf_t, B[0]);
-	sz = sizeof(Mailbox.B);
-	 printf(       "Writing B[%ldB] to address %08x...\n", sz, addr);
-	fprintf(fo, "%% Writing B[%ldB] to address %08x...\n", sz, addr);
-	e_write(addr, (void *) Mailbox.B, sz);
+		addr = DRAM_BASE + offsetof(shared_buf_t, B[0]);
+		sz = sizeof(Mailbox.B);
+		 printf(       "Writing B[%ldB] to address %08x...\n", sz, addr);
+		fprintf(fo, "%% Writing B[%ldB] to address %08x...\n", sz, addr);
+		e_write(addr, (void *) Mailbox.B, sz);
 #else
-	// Copy operand matrices to Epiphany cores' memory
-	 printf(       "Writing image to Epiphany\n");
-	fprintf(fo, "%% Writing image to Epiphany\n");
+		// Copy operand matrices to Epiphany cores' memory
+		 printf(       "Writing image to Epiphany\n");
+		fprintf(fo, "%% Writing image to Epiphany\n");
 
-	sz = sizeof(Mailbox.A) / _Ncores;
-	for (row=0; row<(int) platform.rows; row++)
-		for (col=0; col<(int) platform.cols; col++)
-		{
-			addr = BankA_addr;
-			printf(".");
-			fflush(stdout);
-			cnum = e_get_num_from_coords(pEpiphany, row, col);
-//			 printf(       "Writing A[%uB] to address %08x...\n", sz, addr);
-			fprintf(fo, "%% Writing A[%uB] to address %08x...\n", sz, (coreID[cnum] << 20) | addr); fflush(fo);
-			e_write(pEpiphany, row, col, addr, (void *) &Mailbox.A[cnum * _Score * _Sfft], sz);
-		}
-	printf("\n");
+		sz = sizeof(Mailbox.A) / _Ncores;
+		for (row=0; row<(int) platform.rows; row++)
+			for (col=0; col<(int) platform.cols; col++)
+			{
+				addr = BankA_addr;
+				printf(".");
+				fflush(stdout);
+				cnum = e_get_num_from_coords(pEpiphany, row, col);
+	//			 printf(       "Writing A[%uB] to address %08x...\n", sz, addr);
+				fprintf(fo, "%% Writing A[%uB] to address %08x...\n", sz, (coreID[cnum] << 20) | addr); fflush(fo);
+				e_write(pEpiphany, row, col, addr, (void *) &Mailbox.A[cnum * _Score * _Sfft], sz);
+			}
+		printf("\n");
 #endif
 
 
 
-	// Call the Epiphany fft2d() function
-	 printf(       "GO!\n");
-	fprintf(fo, "%% GO!\n");
-	fflush(stdout);
-	fflush(fo);
-	gettimeofday(&timer[0], NULL);
-	fft2d_go(pDRAM);
-	gettimeofday(&timer[1], NULL);
-	 printf(       "Done!\n\n");
-	fprintf(fo, "%% Done!\n\n");
-	fflush(stdout);
-	fflush(fo);
+		// Call the Epiphany fft2d() function
+		 printf(       "GO!\n");
+		fprintf(fo, "%% GO!\n");
+		fflush(stdout);
+		fflush(fo);
+		gettimeofday(&timer[0], NULL);
+		fft2d_go(pDRAM);
+		gettimeofday(&timer[1], NULL);
+		 printf(       "Done!\n\n");
+		fprintf(fo, "%% Done!\n\n");
+		fflush(stdout);
+		fflush(fo);
 
-	// Read time counters
-//	 printf(       "Reading time count...\n");
-	fprintf(fo, "%% Reading time count...\n");
-	addr = 0x7128+0x4*2 + offsetof(core_t, time_p[0]);
-	sz = TIMERS * sizeof(uint32_t);
-	e_read(pEpiphany, 0, 0, addr, (void *) (&time_p[0]), sz);
+		// Read time counters
+	//	 printf(       "Reading time count...\n");
+		fprintf(fo, "%% Reading time count...\n");
+		addr = 0x7128+0x4*2 + offsetof(core_t, time_p[0]);
+		sz = TIMERS * sizeof(uint32_t);
+		e_read(pEpiphany, 0, 0, addr, (void *) (&time_p[0]), sz);
 
-//	for (int i=0; i<TIMERS; i++)
-//		printf("time_p[%d] = %u\n", i, time_p[i]);
+	//	for (int i=0; i<TIMERS; i++)
+	//		printf("time_p[%d] = %u\n", i, time_p[i]);
 
-	time_d[2] = time_p[7] - time_p[2]; // FFT setup
-	time_d[3] = time_p[2] - time_p[3]; // bitrev (x8)
-	time_d[4] = time_p[3] - time_p[4]; // FFT-1D (x8)
-	time_d[5] = time_p[4] - time_p[5]; // corner-turn
-	time_d[6] = time_p[7] - time_p[8]; // FFT-2D
-	time_d[7] = time_p[6] - time_p[7]; // LPF
-	time_d[9] = time_p[0] - time_p[9]; // Total cycles
+		time_d[2] = time_p[7] - time_p[2]; // FFT setup
+		time_d[3] = time_p[2] - time_p[3]; // bitrev (x8)
+		time_d[4] = time_p[3] - time_p[4]; // FFT-1D (x8)
+		time_d[5] = time_p[4] - time_p[5]; // corner-turn
+		time_d[6] = time_p[7] - time_p[8]; // FFT-2D
+		time_d[7] = time_p[6] - time_p[7]; // LPF
+		time_d[9] = time_p[0] - time_p[9]; // Total cycles
 
-	 printf(       "Finished calculation in %u cycles (%5.3f msec @ %3.0f MHz)\n\n", time_d[9], (time_d[9] * 1000.0 / eMHz), (eMHz / 1e6));
-	fprintf(fo, "%% Finished calculation in %u cycles (%5.3f msec @ %3.0f MHz)\n\n", time_d[9], (time_d[9] * 1000.0 / eMHz), (eMHz / 1e6));
+		 printf(       "Finished calculation in %u cycles (%5.3f msec @ %3.0f MHz)\n\n", time_d[9], (time_d[9] * 1000.0 / eMHz), (eMHz / 1e6));
+		fprintf(fo, "%% Finished calculation in %u cycles (%5.3f msec @ %3.0f MHz)\n\n", time_d[9], (time_d[9] * 1000.0 / eMHz), (eMHz / 1e6));
 
-	 printf(       "FFT2D         - %7u cycles (%5.3f msec)\n", time_d[6], (time_d[6] * 1000.0 / eMHz));
-	 printf(       "  FFT Setup   - %7u cycles (%5.3f msec)\n", time_d[2], (time_d[2] * 1000.0 / eMHz));
-	 printf(       "  BITREV      - %7u cycles (%5.3f msec)\n", time_d[3], (time_d[3] * 1000.0 / eMHz));
-	 printf(       "  FFT1D       - %7u cycles (%5.3f msec x2)\n", time_d[4], (time_d[4] * 1000.0 / eMHz));
-	 printf(       "  Corner Turn - %7u cycles (%5.3f msec)\n", time_d[5], (time_d[5] * 1000.0 / eMHz));
-	 printf(       "LPF           - %7u cycles (%5.3f msec)\n", time_d[7], (time_d[7] * 1000.0 / eMHz));
-	 printf(       "\n");
+		 printf(       "FFT2D         - %7u cycles (%5.3f msec)\n", time_d[6], (time_d[6] * 1000.0 / eMHz));
+		 printf(       "  FFT Setup   - %7u cycles (%5.3f msec)\n", time_d[2], (time_d[2] * 1000.0 / eMHz));
+		 printf(       "  BITREV      - %7u cycles (%5.3f msec)\n", time_d[3], (time_d[3] * 1000.0 / eMHz));
+		 printf(       "  FFT1D       - %7u cycles (%5.3f msec x2)\n", time_d[4], (time_d[4] * 1000.0 / eMHz));
+		 printf(       "  Corner Turn - %7u cycles (%5.3f msec)\n", time_d[5], (time_d[5] * 1000.0 / eMHz));
+		 printf(       "LPF           - %7u cycles (%5.3f msec)\n", time_d[7], (time_d[7] * 1000.0 / eMHz));
+		 printf(       "\n");
 
-	 printf(       "Reading processed image back to host\n");
-	fprintf(fo, "%% Reading processed image back to host\n");
+		 printf(       "Reading processed image back to host\n");
+		fprintf(fo, "%% Reading processed image back to host\n");
 
 
 
-	// Read result matrix
+		// Read result matrix
 #ifdef _USE_DRAM_
-	addr = DRAM_BASE + offsetof(shared_buf_t, B[0]);
-	sz = sizeof(Mailbox.B);
-	 printf(       "Reading B[%ldB] from address %08x...\n", sz, addr);
-	fprintf(fo, "%% Reading B[%ldB] from address %08x...\n", sz, addr);
-	blknum = sz / RdBlkSz;
-	remndr = sz % RdBlkSz;
-	for (i=0; i<blknum; i++)
-	{
+		addr = DRAM_BASE + offsetof(shared_buf_t, B[0]);
+		sz = sizeof(Mailbox.B);
+		 printf(       "Reading B[%ldB] from address %08x...\n", sz, addr);
+		fprintf(fo, "%% Reading B[%ldB] from address %08x...\n", sz, addr);
+		blknum = sz / RdBlkSz;
+		remndr = sz % RdBlkSz;
+		for (i=0; i<blknum; i++)
+		{
+			printf(".");
+			fflush(stdout);
+			e_read(addr+i*RdBlkSz, (void *) ((long unsigned)(Mailbox.B)+i*RdBlkSz), RdBlkSz);
+		}
 		printf(".");
 		fflush(stdout);
-		e_read(addr+i*RdBlkSz, (void *) ((long unsigned)(Mailbox.B)+i*RdBlkSz), RdBlkSz);
-	}
-	printf(".");
-	fflush(stdout);
-	e_read(addr+i*RdBlkSz, (void *) ((long unsigned)(Mailbox.B)+i*RdBlkSz), remndr);
+		e_read(addr+i*RdBlkSz, (void *) ((long unsigned)(Mailbox.B)+i*RdBlkSz), remndr);
 #else
-	// Read result matrix from Epiphany cores' memory
-	sz = sizeof(Mailbox.A) / _Ncores;
-	for (row=0; row<(int) platform.rows; row++)
-		for (col=0; col<(int) platform.cols; col++)
-		{
-			addr = BankA_addr;
-			printf(".");
-			fflush(stdout);
-			cnum = e_get_num_from_coords(pEpiphany, row, col);
-//			printf(        "Reading A[%uB] from address %08x...\n", sz, addr);
-			fprintf(fo, "%% Reading A[%uB] from address %08x...\n", sz, (coreID[cnum] << 20) | addr); fflush(fo);
-			e_read(pEpiphany, row, col, addr, (void *) &Mailbox.B[cnum * _Score * _Sfft], sz);
-		}
+		// Read result matrix from Epiphany cores' memory
+		sz = sizeof(Mailbox.A) / _Ncores;
+		for (row=0; row<(int) platform.rows; row++)
+			for (col=0; col<(int) platform.cols; col++)
+			{
+				addr = BankA_addr;
+				printf(".");
+				fflush(stdout);
+				cnum = e_get_num_from_coords(pEpiphany, row, col);
+	//			printf(        "Reading A[%uB] from address %08x...\n", sz, addr);
+				fprintf(fo, "%% Reading A[%uB] from address %08x...\n", sz, (coreID[cnum] << 20) | addr); fflush(fo);
+				e_read(pEpiphany, row, col, addr, (void *) &Mailbox.B[cnum * _Score * _Sfft], sz);
+			}
 #endif
-	printf("\n");
+		printf("\n");
 
 
 
-	// Convert processed image matrix B into the image file date.
-	for (unsigned int i=0; i<imsize; i++)
-	{
-		for (unsigned int j=0; j<imBpp; j++)
-			imdata[i*imBpp+j] = cabs(Mailbox.B[i]);
+		// Convert processed image matrix B into the image file date.
+		for (unsigned int i=0; i<imsize; i++)
+		{
+			for (unsigned int j=0; j<imBpp; j++)
+				imdata[i*imBpp+j] = cabs(Mailbox.B[i]);
+		}
+
+		// Save processed image to the output file.
+		ilEnable(IL_FILE_OVERWRITE);
+		printf("\nSaving processed image to file \"%s\".\n\n", ar.ofname);
+		if (!ilSaveImage(ar.ofname))
+		{
+			fprintf(stderr, "Could not open output image file \"%s\" ...exiting.\n", ar.ofname);
+			exit(7);
+		}
+
+		// We're done with the image, so let's delete it.
+		ilDeleteImages(1, &ImgId);
+
+		// Simple Error detection loop that displays the Error to the user in a human-readable form.
+	//	while ((Error = ilGetError()))
+	//		PRINT_ERROR_MACRO;
+
 	}
-
-	// Save processed image to the output file.
-	ilEnable(IL_FILE_OVERWRITE);
-	printf("\nSaving processed image to file \"%s\".\n\n", ar.ofname);
-	if (!ilSaveImage(ar.ofname))
-	{
-		fprintf(stderr, "Could not open output image file \"%s\" ...exiting.\n", ar.ofname);
-		exit(7);
-	}
-
-	// We're done with the image, so let's delete it.
-	ilDeleteImages(1, &ImgId);
-
-	// Simple Error detection loop that displays the Error to the user in a human-readable form.
-//	while ((Error = ilGetError()))
-//		PRINT_ERROR_MACRO;
 
 	// Close connection to device
 	if (e_close(pEpiphany))
